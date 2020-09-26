@@ -56,61 +56,80 @@ MultivectorNormSquared::usage =
 Angle::usage =
 "Angle[a,b] gives the angle between two blades a and b. It permits general multivectors as arguments but may give meaningless answers for non-blades."
 
+(*sets, not yet implemented*)
+Multivectors::usage =
+"Multivectors[] symbolically represents the set of all multivectors.
+Multivectors[k] represents the set of k-vectors.
+Multivectors[{grades}] represents the set of set of multivectors with a set of given grades.
+Multivectors[grade(s), dim] represents a set of multivectors in 'dim' dimensions.
+Multivectors[grade(s), {basis}] represents a set of multivectors with listed basis vectors."
+
 Begin["`Private`"]
 
-e/:NonCommutativeMultiply[pre___,e[i_],e[j_],post___]/;Order[i,j]==-1:=-NonCommutativeMultiply[pre,e[j],e[i],post]
-e/:NonCommutativeMultiply[pre__,e[i_],e[i_],post___]:=Metric[i]*(pre**post)
-e/:NonCommutativeMultiply[pre___,e[i_],e[i_],post__]:=Metric[i]*(pre**post)
-e/:NonCommutativeMultiply[e[i_],e[i_]]:=Metric[i]
+e/: pre___**e[i_]**e[j_]**post___/;Order[i,j]==-1:= -NonCommutativeMultiply[pre,e[j],e[i],post]
+e/: pre__**e[i_]**e[i_]**post___:= Metric[i]*(pre**post)
+e/: pre___**e[i_]**e[i_]**post__:= Metric[i]*(pre**post)
+e/: e[i_]**e[i_]:= Metric[i]
 
-e[n__]:=NonCommutativeMultiply@@e/@{n}/;Length[{n}]>1
+e[n__]:= NonCommutativeMultiply@@e/@{n}/;Length[{n}]>1
 
 SetAttributes[e,{HoldAll,NHoldAll}]
 
+e::times = "Basis vectors multiplied using Times rather than NonCommutativeMultiply. Order may not have been preserved."
+e/: e[i_]*e[j_] := (Message[e::times]; e[i]**e[j])
+
 Metric[_]=1
 
+number=_Integer|_Real|_Rational
 NcmExpansionRules={
-	a___**(-b_)**c___:>-a**b**c,
-	a_Plus**b_:>(#**b&/@a),
+	a_Plus**b_:>(#**b&/@a),(*distributive rule*)
 	a_**b_Plus:>(a**#&/@b),
-	x___**a_**y_/;FreeQ[a,e]:>a x**y,
-	x_**a_**y___/;FreeQ[a,e]:>a x**y,
-	x___**(a_ y_)**z_/;FreeQ[a,e]:>a x**y**z,
-	(x_)**(a_ y_)**z___/;FreeQ[a,e]:>a x**y**z,
+	x___**(a:number)**y___:>a x**y,(*move scalars out of products*)
+	x___**((a:number)y_)**z___:>a x**y**z,
+	x___**a_?FreeQ[e|OverVector]**y___:>a x**y,(*here until I add $Assumptions support*)
+	x___**(a_?FreeQ[e|OverVector] y_)**z___:>a x**y**z,
 	NonCommutativeMultiply[a_]:>a,
 	x_^n_Integer/;!FreeQ[x,e]&&n>1:>NonCommutativeMultiply@@Table[x,n]
 };
-ExpandNCM[expr_]:=expr//.NcmExpansionRules
+ExpandNCM[expr_]:= expr//.NcmExpansionRules
 
-KVectorPart[a_,k_Integer]:=If[k===0,a,0]/;FreeQ[a,e]
-KVectorPart[a_.*b_e,k_Integer]:=If[k===1,a*b,0]/;FreeQ[{a},e]
-KVectorPart[a_.*(b:NonCommutativeMultiply[__e]),k_Integer]:=If[Length[b]===k,a*b,0]/;FreeQ[{a},e]
-KVectorPart[a_+b_,k_Integer]:=KVectorPart[a,k]+KVectorPart[b,k]
+KVectorPart[a_?(FreeQ[e|OverVector]),k_Integer]:= If[k===0,a,0]
+KVectorPart[(a_:1)*(b:_e|_OverVector),k_Integer]:= If[k===1,a*b,0]/;FreeQ[a,e|OverVector]
+KVectorPart[(a_:1)*(b:NonCommutativeMultiply[__e]),k_Integer]:= If[Length[b]===k,a*b,0]/;FreeQ[a,e|OverVector]
+KVectorPart[(a_:1)*(b:NonCommutativeMultiply[(_e|_OverVector)..]),k_Integer]:= 0/;FreeQ[{a},e|OverVector]&&(Mod[Length[b]+1,2]==Mod[k,2]||k>Length[b])
+KVectorPart[a_+b_,k_Integer]:= KVectorPart[a,k]+KVectorPart[b,k]
 
-ScalarPart[a_]:=KVectorPart[a,0]
+ScalarPart[a_]:= KVectorPart[a,0]
 
-MaxGrade[mv_]:=Max[0,Length/@Cases[{ExpandNCM@mv},e[_]|NonCommutativeMultiply[__e],\[Infinity]]]
+SetAttributes[KVectorPart,Listable]
 
-KVectorDecomposition[mv_]:=Table[KVectorPart[mv,n],{n,0,MaxGrade[mv]}]
+MaxGrade[mv_]:= Length@DeleteDuplicates@Cases[mv,_e|_OverVector,{0,\[Infinity]}]
 
-Reversion[mv_]:=Sum[(-1)^k KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
-Involution[mv_]:=Sum[(-1)^(k (k-1)/2) KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
-Conjugation[mv_]:=Sum[(-1)^(k (k+1)/2) KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
+KVectorDecomposition[mv_]:= Table[KVectorPart[mv,n],{n,0,MaxGrade[mv]}]
 
-MultivectorNorm[mv_]:=Sqrt[KVectorPart[ExpandNCM[Reversion[mv]**mv],0]]
-MultivectorNormSquared[mv_]:=KVectorPart[ExpandNCM[Reversion[mv]**mv],0]
+Reversion[mv_]:= Sum[(-1)^k KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
+Involution[mv_]:= Sum[(-1)^(k (k-1)/2) KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
+Conjugation[mv_]:= Sum[(-1)^(k (k+1)/2) KVectorPart[mv,k],{k,0,MaxGrade[mv]}]
+
+MultivectorNorm[mv_]:= Sqrt[KVectorPart[ExpandNCM[Reversion[mv]**mv],0]]
+MultivectorNormSquared[mv_]:= KVectorPart[ExpandNCM[Reversion[mv]**mv],0]
 
 GeometricProduct=ExpandNCM@*NonCommutativeMultiply
 
-OuterProduct[a_,b_]:=ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],j+k],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
-CommutatorProduct[a_,b_]:=ExpandNCM[(a**b-b**a)/2]
+OuterProduct[a_,b_]:= ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],j+k],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
+CommutatorProduct[a_,b_]:= ExpandNCM[(a**b-b**a)/2]
 
-LeftContraction[a_,b_]:=ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],k-j],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
-RightContraction[a_,b_]:=ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],j-k],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
-FatDotProduct[a_,b_]:=ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],Abs[k-j]],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
-ScalarProduct[a__]:=ExpandNCM@ScalarPart[GeometricProduct[a]]
+LeftContraction[a_,b_]:= ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],k-j],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
+RightContraction[a_,b_]:= ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],j-k],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
+FatDotProduct[a_,b_]:= ExpandNCM@Sum[KVectorPart[KVectorPart[a,j]**KVectorPart[b,k],Abs[k-j]],{j,0,MaxGrade[a]},{k,0,MaxGrade[b]}]
+ScalarProduct[a__]:= ExpandNCM@ScalarPart[GeometricProduct[a]]
 
-Angle[a_,b_]:=ArcCos[MultivectorNorm[LeftContraction[a,b]]/(MultivectorNorm[a]MultivectorNorm[b])]
+Angle[a_,b_]:= ArcCos[MultivectorNorm[LeftContraction[a,b]]/(MultivectorNorm[a]MultivectorNorm[b])]
+
+Multivectors/:{a__}\[Element]Multivectors[args___]:= Alternatives[a]\[Element]Multivectors[args]
+
+(*for internal use only*)
+(*assumedMultivectorQ[a_]:= Switch[Head@$Assumptions, And, , Element, MemberQ[$Assumptions[[1]], a]*)
 
 End[]
 
