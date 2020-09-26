@@ -41,4 +41,4 @@ The package includes various involutions: Reversion, Involution, and Conjugation
 
 ## Symbolic manipulation
 
-Symbolic vectors may be represented using [OverVector](https://reference.wolfram.com/language/ref/OverVector.html), which renders an arrow over a symbol. These will behave properly as though they are vectors in functions like KVectorPart and ExpandNCM. I also plan on expanding symbolic capabilities further as I continue to work on this package.
+Symbolic vectors may be represented using [OverVector](https://reference.wolfram.com/language/ref/OverVector.html), which renders an arrow over a symbol. These behave properly as though they are vectors in functions like KVectorPart and ExpandNCM. I also plan on expanding symbolic capabilities further as I continue to work on this package.
