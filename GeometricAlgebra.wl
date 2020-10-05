@@ -82,14 +82,14 @@ Metric[_]=1
 
 number=_Integer|_Real|_Rational
 NcmExpansionRules={
-	a_Plus**b_:>(#**b&/@a),(*distributive rule*)
-	a_**b_Plus:>(a**#&/@b),
-	x___**(a:number)**y___:>a x**y,(*move scalars out of products*)
-	x___**((a:number)y_)**z___:>a x**y**z,
-	x___**a_?FreeQ[e|OverVector]**y___:>a x**y,(*here until I add $Assumptions support*)
-	x___**(a_?FreeQ[e|OverVector] y_)**z___:>a x**y**z,
-	NonCommutativeMultiply[a_]:>a,
-	x_^n_Integer/;!FreeQ[x,e]&&n>1:>NonCommutativeMultiply@@Table[x,n]
+	a_Plus**b_ :> (#**b&/@a),(*distributive rule*)
+	a_**b_Plus :> (a**#&/@b),
+	x___**(a:number)**y___ :> a x**y,(*move scalars out of products*)
+	x___**((a:number)y_)**z___ :> a x**y**z,
+	x___**a_?(FreeQ[e|OverVector])**y___ :> a x**y,(*here until I add $Assumptions support*)
+	x___**(a_?(FreeQ[e|OverVector]) y_)**z___ :> a x**y**z,
+	NonCommutativeMultiply[a_] :> a,
+	x_^n_Integer/;!FreeQ[x,e]&&n>1 :> NonCommutativeMultiply@@Table[x,n]
 };
 ExpandNCM[expr_]:= expr//.NcmExpansionRules
 
@@ -97,12 +97,16 @@ KVectorPart[a_?(FreeQ[e|OverVector]),k_Integer]:= If[k===0,a,0]
 KVectorPart[(a_:1)*(b:_e|_OverVector),k_Integer]:= If[k===1,a*b,0]/;FreeQ[a,e|OverVector]
 KVectorPart[(a_:1)*(b:NonCommutativeMultiply[__e]),k_Integer]:= If[Length[b]===k,a*b,0]/;FreeQ[a,e|OverVector]
 KVectorPart[(a_:1)*(b:NonCommutativeMultiply[(_e|_OverVector)..]),k_Integer]:= 0/;FreeQ[{a},e|OverVector]&&(Mod[Length[b]+1,2]==Mod[k,2]||k>Length[b])
+KVectorPart[(a_:1)*KVectorPart[b_,m_],k_]:=If[m==k,KVectorPart[a*b,k],0]/;FreeQ[a,e|OverVector]
 KVectorPart[a_+b_,k_Integer]:= KVectorPart[a,k]+KVectorPart[b,k]
+
+<<Notation`
+Notation[ParsedBoxWrapper[SubscriptBox[RowBox[{"\[LeftAngleBracket]", "a_", "\[RightAngleBracket]"}], "k_"]] \[DoubleLongLeftRightArrow] ParsedBoxWrapper[RowBox[{"KVectorPart", "[", RowBox[{"a_", ",", "k_"}], "]"}]]]
 
 ScalarPart[a_]:= KVectorPart[a,0]
 
 SetAttributes[KVectorPart,Listable]
-
+	
 MaxGrade[mv_]:= Length@DeleteDuplicates@Cases[mv,_e|_OverVector,{0,\[Infinity]}]
 
 KVectorDecomposition[mv_]:= Table[KVectorPart[mv,n],{n,0,MaxGrade[mv]}]
